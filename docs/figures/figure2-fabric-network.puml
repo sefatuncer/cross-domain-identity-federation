@@ -1,0 +1,108 @@
+@startuml Figure2_FabricNetwork
+!theme plain
+skinparam backgroundColor white
+
+title Figure 2: Hyperledger Fabric Network Topology
+
+' Colors
+!define ORG1_COLOR #E3F2FD
+!define ORG2_COLOR #E8F5E9
+!define ORG3_COLOR #FFF3E0
+!define ORDERER_COLOR #FFEBEE
+!define CHANNEL_COLOR #F5F5F5
+
+' Organization 1: Finance
+package "Org1: Finance" as Org1 ORG1_COLOR {
+    component [Peer0.finance] as P0F
+    component [Peer1.finance] as P1F
+    database [CouchDB0] as DB0F
+    database [CouchDB1] as DB1F
+    component [Finance CA] as CA1
+
+    P0F --> DB0F
+    P1F --> DB1F
+}
+
+' Organization 2: Healthcare
+package "Org2: Healthcare" as Org2 ORG2_COLOR {
+    component [Peer0.healthcare] as P0H
+    component [Peer1.healthcare] as P1H
+    database [CouchDB0] as DB0H
+    database [CouchDB1] as DB1H
+    component [Healthcare CA] as CA2
+
+    P0H --> DB0H
+    P1H --> DB1H
+}
+
+' Organization 3: Education
+package "Org3: Education" as Org3 EDUCATION_COLOR {
+    component [Peer0.education] as P0E
+    component [Peer1.education] as P1E
+    database [CouchDB0] as DB0E
+    database [CouchDB1] as DB1E
+    component [Education CA] as CA3
+
+    P0E --> DB0E
+    P1E --> DB1E
+}
+
+' Ordering Service
+package "Ordering Service" as OrdererSvc ORDERER_COLOR {
+    component [Orderer0\n(Leader)] as O0
+    component [Orderer1] as O1
+    component [Orderer2] as O2
+
+    O0 <--> O1 : Raft
+    O1 <--> O2 : Raft
+    O0 <--> O2 : Raft
+}
+
+' Channels
+rectangle "Global Channel" as GC CHANNEL_COLOR {
+    note as GCNote
+    **Chaincodes:**
+    - Trusted Issuer Registry
+    - Schema Registry
+    - Privacy Audit Log
+    end note
+}
+
+rectangle "Cross-Domain Channel" as CDC CHANNEL_COLOR {
+    note as CDCNote
+    **Chaincodes:**
+    - Cross-Domain Policy
+    - Verification Log
+    end note
+}
+
+' Channel memberships
+P0F --> GC
+P0H --> GC
+P0E --> GC
+
+P0F --> CDC
+P0H --> CDC
+P0E --> CDC
+
+' Orderer connections
+GC --> O0
+CDC --> O0
+
+' Peer gossip (within org)
+P0F <..> P1F : Gossip
+P0H <..> P1H : Gossip
+P0E <..> P1E : Gossip
+
+' Legend
+legend right
+  |= Symbol |= Description |
+  | <color:E3F2FD>  </color> | Finance Org |
+  | <color:E8F5E9>  </color> | Healthcare Org |
+  | <color:FFF3E0>  </color> | Education Org |
+  | <color:FFEBEE>  </color> | Ordering Service |
+  | --- | Gossip Protocol |
+  | --> | Channel Membership |
+endlegend
+
+@enduml

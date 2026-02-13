@@ -1,0 +1,108 @@
+@startuml Figure1_SystemArchitecture
+!theme plain
+skinparam backgroundColor white
+skinparam componentStyle rectangle
+
+title Figure 1: Cross-Domain Identity Federation System Architecture
+
+' Define colors for domains
+!define FINANCE_COLOR #E3F2FD
+!define HEALTHCARE_COLOR #E8F5E9
+!define EDUCATION_COLOR #FFF3E0
+!define BRIDGE_COLOR #F3E5F5
+!define FABRIC_COLOR #ECEFF1
+
+' Layer 1: Application Layer (OpenID4VC)
+package "Application Layer (OpenID4VC)" as AppLayer {
+
+    package "Finance Domain" as FinanceDomain FINANCE_COLOR {
+        component [Finance Issuer\n(OpenID4VCI)] as FI
+        component [Finance Verifier\n(OpenID4VP)] as FV
+    }
+
+    package "Healthcare Domain" as HealthcareDomain HEALTHCARE_COLOR {
+        component [Healthcare Issuer\n(OpenID4VCI)] as HI
+        component [Healthcare Verifier\n(OpenID4VP)] as HV
+    }
+
+    package "Education Domain" as EducationDomain EDUCATION_COLOR {
+        component [Education Issuer\n(OpenID4VCI)] as EI
+        component [Education Verifier\n(OpenID4VP)] as EV
+    }
+
+    component [Holder Wallet\n(Credential Storage)] as Wallet
+}
+
+' Layer 2: Bridge Layer
+package "Bridge Layer" as BridgeLayer BRIDGE_COLOR {
+    component [Fabric-OpenID Bridge\nService] as Bridge
+
+    component [Issuer Validation\nMiddleware] as IssuerMW
+    component [Policy Evaluation\nService] as PolicySvc
+    component [Audit Logging\nService] as AuditSvc
+}
+
+' Layer 3: Blockchain Layer (Hyperledger Fabric)
+package "Blockchain Layer (Hyperledger Fabric)" as FabricLayer FABRIC_COLOR {
+
+    database "Trusted Issuer\nRegistry" as TIR
+    database "Schema\nRegistry" as SR
+    database "Cross-Domain\nPolicy" as CDP
+    database "Privacy-Preserving\nAudit Log" as PAL
+
+    component [Fabric CA] as CA
+    component [Orderer Service\n(Raft)] as Orderer
+}
+
+' Connections - Application to Bridge
+FI --> Bridge : Issuer Registration
+HI --> Bridge : Issuer Registration
+EI --> Bridge : Issuer Registration
+
+FV --> Bridge : Cross-Domain Verify
+HV --> Bridge : Cross-Domain Verify
+EV --> Bridge : Cross-Domain Verify
+
+Wallet --> FV : Present Credential
+Wallet --> HV : Present Credential
+Wallet --> EV : Present Credential
+
+' Connections - Bridge Internal
+Bridge --> IssuerMW
+Bridge --> PolicySvc
+Bridge --> AuditSvc
+
+' Connections - Bridge to Fabric
+IssuerMW --> TIR : Validate
+PolicySvc --> CDP : Evaluate
+AuditSvc --> PAL : Log
+
+Bridge --> SR : Schema Lookup
+Bridge --> CA : Certificate Mgmt
+
+' Fabric Internal
+TIR --> Orderer
+SR --> Orderer
+CDP --> Orderer
+PAL --> Orderer
+
+' Trust boundaries
+note right of AppLayer
+  **Trust Boundary 1**
+  User-controlled components
+  Standard protocols (OpenID4VC)
+end note
+
+note right of BridgeLayer
+  **Trust Boundary 2**
+  Hybrid integration layer
+  Protocol translation
+end note
+
+note right of FabricLayer
+  **Trust Boundary 3**
+  Immutable, consensus-based
+  Multi-org governance
+end note
+
+@enduml

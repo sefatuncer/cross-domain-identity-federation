@@ -1,0 +1,187 @@
+version: '3.8'
+
+# Baseline Systems for Academic Comparison
+# All baselines run independently for fair comparison
+
+networks:
+  baseline-network:
+    driver: bridge
+
+volumes:
+  keycloak-data:
+  postgres-keycloak:
+  postgres-centralized:
+  redis-cache:
+
+services:
+  # ============================================
+  # BASELINE 1: Traditional OIDC Federation (Keycloak)
+  # ============================================
+
+  keycloak-db:
+    image: postgres:15-alpine
+    container_name: keycloak-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak_password
+    volumes:
+      - postgres-keycloak:/var/lib/postgresql/data
+    networks:
+      - baseline-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    container_name: keycloak-oidc
+    command: start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak_password
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: true
+      KC_METRICS_ENABLED: true
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak/realms:/opt/keycloak/data/import
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    networks:
+      - baseline-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # OIDC Client Application (simulates cross-domain access)
+  oidc-client:
+    build:
+      context: ./oidc-baseline
+      dockerfile: Dockerfile
+    container_name: oidc-client-app
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      CLIENT_ID: cross-domain-client
+      CLIENT_SECRET: cross-domain-secret
+      PORT: 3100
+    ports:
+      - "3100:3100"
+    depends_on:
+      - keycloak
+    networks:
+      - baseline-network
+
+  # ============================================
+  # BASELINE 2: Centralized Identity System
+  # ============================================
+
+  centralized-db:
+    image: postgres:15-alpine
+    container_name: centralized-postgres
+    environment:
+      POSTGRES_DB: identity_central
+      POSTGRES_USER: identity
+      POSTGRES_PASSWORD: identity_password
+    volumes:
+      - postgres-centralized:/var/lib/postgresql/data
+      - ./centralized-baseline/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5433:5432"
+    networks:
+      - baseline-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  centralized-cache:
+    image: redis:7-alpine
+    container_name: centralized-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-cache:/data
+    networks:
+      - baseline-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  centralized-identity:
+    build:
+      context: ./centralized-baseline
+      dockerfile: Dockerfile
+    container_name: centralized-identity-service
+    environment:
+      DATABASE_URL: postgresql://identity:identity_password@centralized-db:5432/identity_central
+      REDIS_URL: redis://centralized-cache:6379
+      PORT: 3200
+      JWT_SECRET: centralized-jwt-secret-key-for-testing
+    ports:
+      - "3200:3200"
+    depends_on:
+      centralized-db:
+        condition: service_healthy
+      centralized-cache:
+        condition: service_healthy
+    networks:
+      - baseline-network
+
+  # ============================================
+  # BASELINE 3: Simulated Hyperledger Indy (Simplified)
+  # ============================================
+
+  indy-simulator:
+    build:
+      context: ./indy-baseline
+      dockerfile: Dockerfile
+    container_name: indy-simulator
+    environment:
+      PORT: 3300
+      LEDGER_TYPE: simulated
+      GENESIS_PATH: /app/genesis.json
+    ports:
+      - "3300:3300"
+    volumes:
+      - ./indy-baseline/genesis.json:/app/genesis.json
+    networks:
+      - baseline-network
+
+  # ============================================
+  # Benchmark Runner
+  # ============================================
+
+  benchmark-runner:
+    build:
+      context: ./benchmark
+      dockerfile: Dockerfile
+    container_name: baseline-benchmark
+    environment:
+      OIDC_BASELINE_URL: http://oidc-client:3100
+      CENTRALIZED_BASELINE_URL: http://centralized-identity:3200
+      INDY_BASELINE_URL: http://indy-simulator:3300
+      OUR_SOLUTION_URL: http://host.docker.internal:4000
+      RESULTS_DIR: /app/results
+    volumes:
+      - ./benchmark/results:/app/results
+    depends_on:
+      - oidc-client
+      - centralized-identity
+      - indy-simulator
+    networks:
+      - baseline-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

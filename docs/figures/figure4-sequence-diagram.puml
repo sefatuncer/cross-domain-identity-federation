@@ -1,0 +1,94 @@
+@startuml Figure4_SequenceDiagram
+!theme plain
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+
+title Figure 4: Cross-Domain Verification Sequence Diagram
+
+actor "Holder\n(Wallet)" as H
+participant "Verifier\n(Healthcare)" as V
+participant "Bridge\nService" as B
+participant "Fabric\nNetwork" as F
+database "Trusted\nIssuer Registry" as TIR
+database "Policy\nChaincode" as PC
+database "Audit\nLog" as AL
+
+== OpenID4VP: Authorization Request ==
+
+V -> H: 1. Authorization Request\n(presentation_definition, nonce)
+note right of V: ~2ms
+
+H -> H: 2. Select matching credential\n(Finance KYC)
+note right of H: User consent
+
+H -> H: 3. Apply selective disclosure
+H -> H: 4. Create VP Token (signed)
+
+H -> V: 5. Authorization Response\n(vp_token, presentation_submission)
+note right of H: ~5ms
+
+== Signature Verification ==
+
+V -> V: 6. Verify VP signature
+note right of V: Ed25519 verification\n~1ms
+
+== Fabric Integration: Issuer Validation ==
+
+V -> B: 7. POST /api/issuer/validate\n{issuerDid, credentialType}
+note right of V: ~1ms network
+
+B -> F: 8. ValidateIssuer()\ntransaction proposal
+
+F -> TIR: 9. Query issuer
+TIR --> F: 10. Issuer metadata\n(trustLevel, allowedTypes)
+
+F --> B: 11. Validation result
+note right of F: ~0.5ms (mock)\n~50ms (real Fabric)
+
+B --> V: 12. {isValid: true, trustLevel: 4}
+
+== Fabric Integration: Policy Evaluation ==
+
+V -> B: 13. POST /api/policy/evaluate\n{sourceDomain, targetDomain, credentialType}
+
+B -> F: 14. EvaluatePolicy()\ntransaction proposal
+
+F -> PC: 15. Check cross-domain rules
+note right of PC
+  Finance → Healthcare:
+  - KYCCredential ✓
+  - IncomeVerification ✓
+end note
+
+PC --> F: 16. Policy decision
+
+F --> B: 17. {isAllowed: true, requiredAttributes: [...]}
+
+B --> V: 18. Policy result
+
+== Audit Logging ==
+
+B -> F: 19. LogVerificationEvent()\n(privacy-preserving hash)
+
+F -> AL: 20. Append audit record
+
+AL --> F: 21. eventId
+F --> B: 22. Log confirmation
+
+== Result ==
+
+V -> V: 23. Process results
+
+V -> H: 24. Access Granted\n(200 OK)
+
+note over H, AL
+  **Total Latency Breakdown:**
+  - OpenID4VP flow: ~8ms
+  - Signature verification: ~1ms
+  - Issuer validation: ~1ms
+  - Policy evaluation: ~1ms
+  - Audit logging: ~1ms
+  **Total: ~12ms** (mock mode)
+end note
+
+@enduml

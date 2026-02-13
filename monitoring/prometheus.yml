@@ -1,0 +1,57 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Hyperledger Fabric Orderer
+  - job_name: 'fabric-orderer'
+    static_configs:
+      - targets: ['orderer.crossdomain.com:9443']
+    metrics_path: /metrics
+
+  # Hyperledger Fabric Peers
+  - job_name: 'fabric-peers'
+    static_configs:
+      - targets:
+        - 'peer0.finance.crossdomain.com:9444'
+        - 'peer0.healthcare.crossdomain.com:9445'
+        - 'peer0.education.crossdomain.com:9446'
+    metrics_path: /metrics
+
+  # Bridge Service
+  - job_name: 'bridge-service'
+    static_configs:
+      - targets: ['bridge-service:4000']
+    metrics_path: /metrics
+
+  # OpenID4VC Agents
+  - job_name: 'openid-agents'
+    static_configs:
+      - targets:
+        - 'finance-issuer:3001'
+        - 'healthcare-issuer:3002'
+        - 'education-issuer:3003'
+        - 'holder-wallet:3010'
+        - 'crossdomain-verifier:3020'
+    metrics_path: /metrics
+
+  # CouchDB
+  - job_name: 'couchdb'
+    static_configs:
+      - targets:
+        - 'couchdb.finance:5984'
+        - 'couchdb.healthcare:5984'
+        - 'couchdb.education:5984'
+    metrics_path: /_node/_local/_stats/prometheus

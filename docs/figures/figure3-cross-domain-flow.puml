@@ -1,0 +1,84 @@
+@startuml Figure3_CrossDomainFlow
+!theme plain
+skinparam backgroundColor white
+
+title Figure 3: Cross-Domain Credential Verification Flow
+
+|Holder|
+|Verifier (Target Domain)|
+|Bridge Service|
+|Hyperledger Fabric|
+
+|Holder|
+start
+:1. User initiates\nservice access;
+
+|Verifier (Target Domain)|
+:2. Generate verification\nrequest (nonce);
+:3. Create Presentation\nDefinition;
+
+|Holder|
+:4. Receive presentation\nrequest;
+:5. Select credential\nfrom wallet;
+:6. Apply selective\ndisclosure;
+:7. Sign presentation;
+
+|Verifier (Target Domain)|
+:8. Receive VP Token;
+:9. Validate signature;
+if (Signature valid?) then (yes)
+  :10. Extract issuer DID;
+else (no)
+  #pink:Reject: Invalid signature;
+  stop
+endif
+
+|Bridge Service|
+:11. Request issuer\nvalidation;
+
+|Hyperledger Fabric|
+:12. Query Trusted\nIssuer Registry;
+if (Issuer trusted?) then (yes)
+  :13. Return issuer\nmetadata;
+else (no)
+  |Bridge Service|
+  #pink:Reject: Untrusted issuer;
+  stop
+endif
+
+|Bridge Service|
+:14. Request policy\nevaluation;
+
+|Hyperledger Fabric|
+:15. Evaluate Cross-Domain\nPolicy Chaincode;
+note right
+  **Policy Check:**
+  - Source domain allowed?
+  - Credential type accepted?
+  - Trust level sufficient?
+  - Required attributes present?
+end note
+
+if (Policy allows?) then (yes)
+  :16. Return policy\ndecision;
+else (no)
+  |Bridge Service|
+  #pink:Reject: Policy violation;
+  stop
+endif
+
+|Hyperledger Fabric|
+:17. Log verification\nevent (hashed);
+
+|Bridge Service|
+:18. Return verification\nresult;
+
+|Verifier (Target Domain)|
+:19. Process verification\nresult;
+#palegreen:20. Grant service\naccess;
+
+|Holder|
+:21. Access granted;
+stop
+
+@enduml
